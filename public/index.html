@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Visitor Counter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+
+  <!-- Feature: Visits Chart — load Chart.js from CDN (no npm install needed) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ============================================================
+       FEATURE: LIGHT / DARK THEME TOGGLE
+       The :root block defines dark mode (default).
+       The [data-theme="light"] block overrides to light mode.
+       Swapping body's data-theme attribute switches the whole theme.
+    ============================================================ */
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --border: #1e1e2e;
+      --accent: #00ff88;
+      --accent2: #ff6b35;
+      --text: #e8e8f0;
+      --muted: #555570;
+      --card: #13131c;
+      --grid-color: rgba(0,255,136,0.03);
+      --orb-color: rgba(0,255,136,0.06);
+      --chart-grid: rgba(255,255,255,0.05);
+    }
+
+    /* Light theme variable overrides */
+    [data-theme="light"] {
+      --bg: #f8f8fa;
+      --surface: #ffffff;
+      --border: #e0e0ee;
+      --accent: #00aa55;
+      --accent2: #e05a20;
+      --text: #111118;
+      --muted: #8888aa;
+      --card: #ffffff;
+      --grid-color: rgba(0,170,85,0.04);
+      --orb-color: rgba(0,170,85,0.05);
+      --chart-grid: rgba(0,0,0,0.06);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+      padding: 2rem;
+      /* Smooth transition when switching themes */
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    /* Animated background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Glowing orb */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, var(--orb-color) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 640px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* Header — now contains both title and the theme toggle button */
+    .header {
+      text-align: center;
+      margin-bottom: 0.5rem;
+      position: relative;
+    }
+
+    /* ============================================================
+       FEATURE: LIGHT / DARK THEME TOGGLE
+       The toggle button sits in the top-right of the header.
+    ============================================================ */
+    .theme-toggle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 0.4rem 0.9rem;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+    }
+    .theme-toggle:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.3em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      opacity: 0;
+      animation: fadeUp 0.6s ease forwards 0.2s;
+    }
+
+    h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(3rem, 10vw, 6rem);
+      letter-spacing: 0.05em;
+      line-height: 1;
+      background: linear-gradient(135deg, #ffffff 0%, #888899 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      opacity: 0;
+      animation: fadeUp 0.6s ease forwards 0.3s;
+    }
+
+    /* Light mode: darker gradient for readable heading */
+    [data-theme="light"] h1 {
+      background: linear-gradient(135deg, #111118 0%, #555570 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    /* Main counter card */
+    .counter-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3rem 2rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      opacity: 0;
+      animation: fadeUp 0.6s ease forwards 0.4s;
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    .counter-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+
+    .counter-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.25em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .counter-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(5rem, 20vw, 10rem);
+      line-height: 1;
+      color: var(--accent);
+      text-shadow: 0 0 60px rgba(0,255,136,0.3);
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      display: block;
+    }
+
+    .counter-value.bump {
+      transform: scale(1.08);
+      text-shadow: 0 0 80px rgba(0,255,136,0.6);
+    }
+
+    .counter-sub {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 0.75rem;
+      font-weight: 300;
+    }
+
+    .source-badge {
+      display: inline-block;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      padding: 0.25rem 0.75rem;
+      border-radius: 100px;
+      margin-top: 1rem;
+      text-transform: uppercase;
+    }
+
+    .source-badge.database {
+      background: rgba(0,255,136,0.1);
+      color: var(--accent);
+      border: 1px solid rgba(0,255,136,0.2);
+    }
+
+    .source-badge.memory {
+      background: rgba(255,107,53,0.1);
+      color: var(--accent2);
+      border: 1px solid rgba(255,107,53,0.2);
+    }
+
+    /* ============================================================
+       FEATURE: VISIT NOTES/LABELS
+       The btn-row now has 3 columns to fit the note input.
+       On narrow screens it stacks to 2 rows.
+    ============================================================ */
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      opacity: 0;
+      animation: fadeUp 0.6s ease forwards 0.5s;
+    }
+
+    /* Note input spans full width below the two buttons */
+    .note-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .note-input {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+    .note-input::placeholder { color: var(--muted); }
+    .note-input:focus { border-color: var(--accent); }
+
+    .btn {
+      padding: 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: var(--card);
+      color: var(--text);
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(0,255,136,0.05);
+      transform: translateY(-2px);
+    }
+
+    .btn:active { transform: translateY(0); }
+
+    .btn.danger:hover {
+      border-color: var(--accent2);
+      color: var(--accent2);
+      background: rgba(255,107,53,0.05);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+      opacity: 0;
+      animation: fadeUp 0.6s ease forwards 0.6s;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1rem;
+      text-align: center;
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    .stat-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.8rem;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: 0.4rem;
+    }
+
+    /* ============================================================
+       FEATURE: VISITS CHART
+       A card wrapping the Chart.js canvas element.
+    ============================================================ */
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      opacity: 0;
+      animation: fadeUp 0.6s ease forwards 0.65s;
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    .chart-title {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.25em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    /* The canvas will fill this wrapper */
+    .chart-wrap {
+      position: relative;
+      height: 160px;
+    }
+
+    /* Recent visits */
+    .recent-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      opacity: 0;
+      animation: fadeUp 0.6s ease forwards 0.7s;
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    .recent-title {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.25em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .visit-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .visit-list::-webkit-scrollbar { width: 4px; }
+    .visit-list::-webkit-scrollbar-track { background: transparent; }
+    .visit-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .visit-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 0.75rem;
+      background: var(--surface);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      animation: slideIn 0.3s ease;
+      gap: 0.5rem;
+    }
+
+    .visit-time {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    /* Feature: Visit Notes — note text styled in accent color */
+    .visit-note {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--accent);
+      flex: 1;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      opacity: 0.8;
+    }
+
+    .visit-ip {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      padding: 1rem;
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* Status dot */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      opacity: 0;
+      animation: fadeUp 0.6s ease forwards 0.8s;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(0,255,136,0); }
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1.5rem;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      z-index: 100;
+      white-space: nowrap;
+    }
+
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ============================================================
+       FEATURE: ADMIN AUTH FOR RESET
+       Modal overlay and dialog styles.
+    ============================================================ */
+    .modal-overlay {
+      /* Hidden by default — shown via JS when Reset is clicked */
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* When JS adds the 'show' class, switch from display:none to display:flex */
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      animation: fadeUp 0.3s ease;
+    }
+
+    .modal-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.8rem;
+      color: var(--accent2);
+      letter-spacing: 0.05em;
+    }
+
+    .modal-desc {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .modal-input {
+      width: 100%;
+      padding: 0.85rem 1rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .modal-input:focus { border-color: var(--accent2); }
+
+    .modal-error {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--accent2);
+      display: none;
+    }
+
+    .modal-error.show { display: block; }
+
+    .modal-btns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================
+     FEATURE: ADMIN AUTH FOR RESET — Modal dialog
+     Hidden by default, shown when the Reset button is clicked.
+============================================================ -->
+<div class="modal-overlay" id="resetModal">
+  <div class="modal">
+    <div class="modal-title">Reset Counter</div>
+    <p class="modal-desc">This will permanently delete all visitor data. Enter the admin key to confirm.</p>
+    <!-- Password input — the value is sent as the Authorization header -->
+    <input
+      class="modal-input"
+      type="password"
+      id="adminKeyInput"
+      placeholder="Enter admin key..."
+      autocomplete="off"
+    />
+    <div class="modal-error" id="modalError">✗ Wrong admin key — check your ADMIN_KEY in .env</div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn danger" onclick="confirmReset()" id="confirmResetBtn">Reset All Data</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div class="header">
+    <!-- Feature: Light/Dark Theme Toggle — button in top-right of header -->
+    <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">☾ Dark</button>
+    <div class="label">Full Stack Demo</div>
+    <h1>Visitor Counter</h1>
+  </div>
+
+  <div class="counter-card">
+    <div class="counter-label">Total Visitors</div>
+    <span class="counter-value" id="counterValue">0</span>
+    <div class="counter-sub">people have visited this page</div>
+    <div><span class="source-badge database" id="sourceBadge">● database</span></div>
+  </div>
+
+  <!-- Buttons row -->
+  <div class="btn-row">
+    <button class="btn" onclick="recordVisit()" id="visitBtn">
+      + Record My Visit
+    </button>
+    <!-- Feature: Admin Auth — clicking this now opens the modal instead of confirm() -->
+    <button class="btn danger" onclick="openModal()" id="resetBtn">
+      ↺ Reset Counter
+    </button>
+  </div>
+
+  <!-- Feature: Visit Notes/Labels — text input for optional label -->
+  <div class="note-row">
+    <input
+      class="note-input"
+      type="text"
+      id="noteInput"
+      placeholder="Label for this visit (optional) — e.g. Friend demo, Laptop"
+      maxlength="50"
+    />
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-value" id="todayCount">0</div>
+      <div class="stat-label">Today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="sessionCount">0</div>
+      <div class="stat-label">This Session</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="apiCalls">0</div>
+      <div class="stat-label">API Calls</div>
+    </div>
+  </div>
+
+  <!-- Feature: Visits Chart — canvas element for Chart.js bar chart -->
+  <div class="chart-card">
+    <div class="chart-title">Visits per Hour (last 24h)</div>
+    <div class="chart-wrap">
+      <canvas id="visitsChart"></canvas>
+    </div>
+  </div>
+
+  <div class="recent-card">
+    <div class="recent-title">Recent Visits</div>
+    <div class="visit-list" id="visitList">
+      <div class="empty-state">No visits yet...</div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="dot"></div>
+    <span id="statusText">Connected to server</span>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let sessionVisits = 0;
+  let apiCallCount = 0;
+
+  // Chart.js chart instance — stored so we can update it without creating a new one
+  let visitsChartInstance = null;
+
+  // ============================================================
+  // FEATURE: LIGHT / DARK THEME TOGGLE
+  // ============================================================
+
+  // toggleTheme() is called when the button is clicked
+  function toggleTheme() {
+    // Check current theme (default is dark)
+    const isDark = document.body.dataset.theme !== 'light';
+    const newTheme = isDark ? 'light' : 'dark';
+
+    // Apply the new theme to body — CSS [data-theme="light"] takes over
+    document.body.dataset.theme = newTheme;
+
+    // Save the preference in localStorage so it persists across page reloads
+    localStorage.setItem('theme', newTheme);
+
+    // Update button label
+    document.getElementById('themeBtn').textContent = newTheme === 'light' ? '☀ Light' : '☾ Dark';
+
+    // Re-render the chart so its colors match the new theme
+    if (visitsChartInstance) {
+      updateChartColors(visitsChartInstance);
+    }
+  }
+
+  // On page load, restore the saved theme (if any)
+  document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    document.body.dataset.theme = savedTheme;
+    document.getElementById('themeBtn').textContent = savedTheme === 'light' ? '☀ Light' : '☾ Dark';
+  });
+
+  // ============================================================
+  // FEATURE: ADMIN AUTH FOR RESET — Modal helpers
+  // ============================================================
+
+  function openModal() {
+    // Show the modal overlay
+    document.getElementById('resetModal').classList.add('show');
+    document.getElementById('adminKeyInput').value = '';
+    document.getElementById('modalError').classList.remove('show');
+    // Focus the input so user can type right away
+    setTimeout(() => document.getElementById('adminKeyInput').focus(), 100);
+  }
+
+  function closeModal() {
+    document.getElementById('resetModal').classList.remove('show');
+  }
+
+  // Close modal if user clicks the dark overlay (outside the modal box)
+  document.getElementById('resetModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Allow pressing Enter inside the password field to confirm
+  document.getElementById('adminKeyInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') confirmReset();
+  });
+
+  async function confirmReset() {
+    const key = document.getElementById('adminKeyInput').value.trim();
+    if (!key) return;
+
+    const btn = document.getElementById('confirmResetBtn');
+    btn.disabled = true;
+    btn.textContent = 'Resetting...';
+
+    try {
+      // Send the admin key as a Bearer token in the Authorization header
+      const res = await fetch('/api/reset', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${key}`
+        }
+      });
+
+      if (res.status === 401) {
+        // Wrong key — show error inside modal
+        document.getElementById('modalError').classList.add('show');
+        btn.disabled = false;
+        btn.textContent = 'Reset All Data';
+        return;
+      }
+
+      // Success — close modal and update the UI
+      closeModal();
+      updateCounter(0, 'database');
+      document.getElementById('visitList').innerHTML = '<div class="empty-state">No visits yet...</div>';
+      document.getElementById('todayCount').textContent = 0;
+      document.getElementById('sessionCount').textContent = 0;
+      sessionVisits = 0;
+
+      // Clear the chart too
+      if (visitsChartInstance) {
+        visitsChartInstance.data.labels = [];
+        visitsChartInstance.data.datasets[0].data = [];
+        visitsChartInstance.update();
+      }
+
+      showToast('↺ Counter reset!');
+    } catch (e) {
+      showToast('✗ Could not reach server');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Reset All Data';
+  }
+
+  // ============================================================
+  // SHARED HELPERS
+  // ============================================================
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  function updateCounter(count, source) {
+    const el = document.getElementById('counterValue');
+    el.textContent = count;
+    el.classList.add('bump');
+    setTimeout(() => el.classList.remove('bump'), 400);
+
+    const badge = document.getElementById('sourceBadge');
+    badge.textContent = `● ${source}`;
+    badge.className = `source-badge ${source}`;
+
+    apiCallCount++;
+    document.getElementById('apiCalls').textContent = apiCallCount;
+  }
+
+  async function fetchCount() {
+    try {
+      const res = await fetch('/api/count');
+      const data = await res.json();
+      updateCounter(data.count, data.source);
+      document.getElementById('statusText').textContent = 'Connected to server';
+    } catch (e) {
+      document.getElementById('statusText').textContent = 'Server offline';
+    }
+  }
+
+  async function fetchRecent() {
+    try {
+      const res = await fetch('/api/recent');
+      const data = await res.json();
+      const list = document.getElementById('visitList');
+
+      if (data.visits.length === 0) {
+        list.innerHTML = '<div class="empty-state">No visits yet...</div>';
+        return;
+      }
+
+      // Feature: Visit Notes — each row now shows time, note (if any), and masked IP
+      list.innerHTML = data.visits.map(v => {
+        const time = new Date(v.visited_at).toLocaleTimeString();
+        const ip = v.ip_address || 'unknown';
+        const maskedIp = ip.length > 12 ? ip.substring(0, 12) + '...' : ip;
+
+        // Only render note span if there is a note
+        const noteHtml = v.note
+          ? `<span class="visit-note">${v.note}</span>`
+          : `<span class="visit-note" style="opacity:0.3">—</span>`;
+
+        return `
+          <div class="visit-item">
+            <span class="visit-time">${time}</span>
+            ${noteHtml}
+            <span class="visit-ip">${maskedIp}</span>
+          </div>`;
+      }).join('');
+
+      // Today count
+      const today = data.visits.filter(v => {
+        const d = new Date(v.visited_at);
+        const now = new Date();
+        return d.toDateString() === now.toDateString();
+      }).length;
+      document.getElementById('todayCount').textContent = today;
+    } catch (e) {}
+  }
+
+  async function recordVisit() {
+    const btn = document.getElementById('visitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Recording...';
+
+    // Feature: Visit Notes/Labels — read the note input value
+    const note = document.getElementById('noteInput').value.trim();
+
+    try {
+      const res = await fetch('/api/visit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Send note in the request body (empty string becomes null on the server)
+        body: JSON.stringify({ note: note || null })
+      });
+      const data = await res.json();
+      updateCounter(data.count, data.source);
+      sessionVisits++;
+      document.getElementById('sessionCount').textContent = sessionVisits;
+
+      // Clear the note input after recording
+      document.getElementById('noteInput').value = '';
+
+      await fetchRecent();
+      await fetchStats(); // Refresh chart after new visit
+      showToast('✓ Visit recorded!');
+    } catch (e) {
+      showToast('✗ Could not reach server');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '+ Record My Visit';
+  }
+
+  // ============================================================
+  // FEATURE: VISITS CHART
+  // Uses Chart.js (loaded from CDN at the top of the file)
+  // ============================================================
+
+  // Returns Chart.js-compatible color values based on current theme
+  function getChartColors() {
+    const isLight = document.body.dataset.theme === 'light';
+    return {
+      accent: isLight ? '#00aa55' : '#00ff88',
+      accentAlpha: isLight ? 'rgba(0,170,85,0.15)' : 'rgba(0,255,136,0.15)',
+      gridColor: isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)',
+      textColor: isLight ? '#8888aa' : '#555570',
+    };
+  }
+
+  // Updates chart colors without destroying and recreating the whole chart
+  function updateChartColors(chart) {
+    const c = getChartColors();
+    chart.data.datasets[0].backgroundColor = c.accentAlpha;
+    chart.data.datasets[0].borderColor = c.accent;
+    chart.options.scales.x.grid.color = c.gridColor;
+    chart.options.scales.y.grid.color = c.gridColor;
+    chart.options.scales.x.ticks.color = c.textColor;
+    chart.options.scales.y.ticks.color = c.textColor;
+    chart.update();
+  }
+
+  async function fetchStats() {
+    try {
+      const res = await fetch('/api/stats');
+      const data = await res.json();
+
+      // Reverse to show oldest → newest left to right
+      const stats = [...data.stats].reverse();
+
+      // Format each hour bucket as "HH:00" for the chart X axis label
+      const labels = stats.map(s => {
+        const d = new Date(s.bucket);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      });
+
+      // Visit counts for each bucket
+      const counts = stats.map(s => parseInt(s.count));
+
+      const c = getChartColors();
+      const canvas = document.getElementById('visitsChart');
+
+      if (!visitsChartInstance) {
+        // Create the chart on first load
+        visitsChartInstance = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Visits',
+              data: counts,
+              backgroundColor: c.accentAlpha,
+              borderColor: c.accent,
+              borderWidth: 1.5,
+              borderRadius: 4,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  // Custom tooltip: "3 visits" instead of just "3"
+                  label: ctx => `${ctx.parsed.y} visit${ctx.parsed.y !== 1 ? 's' : ''}`
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: c.gridColor },
+                ticks: {
+                  color: c.textColor,
+                  font: { family: "'DM Mono', monospace", size: 10 },
+                  maxRotation: 45,
+                }
+              },
+              y: {
+                grid: { color: c.gridColor },
+                ticks: {
+                  color: c.textColor,
+                  font: { family: "'DM Mono', monospace", size: 10 },
+                  // Only show whole numbers on the Y axis
+                  stepSize: 1,
+                  precision: 0,
+                },
+                beginAtZero: true,
+              }
+            }
+          }
+        });
+      } else {
+        // Update existing chart with fresh data
+        visitsChartInstance.data.labels = labels;
+        visitsChartInstance.data.datasets[0].data = counts;
+        visitsChartInstance.update();
+      }
+    } catch (e) {
+      // If stats endpoint fails, the chart just stays empty — no crash
+    }
+  }
+
+  // ============================================================
+  // INIT — runs when the page first loads
+  // ============================================================
+  fetchCount();
+  fetchRecent();
+  fetchStats();
+
+  // Auto-refresh count and chart every 10 seconds
+  setInterval(fetchCount, 10000);
+  setInterval(fetchStats, 10000);
+</script>
+</body>
+</html>
